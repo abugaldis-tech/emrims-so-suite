@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: emrims-postgres
+    environment:
+      POSTGRES_DB: emrims_db
+      POSTGRES_USER: emrims_user
+      POSTGRES_PASSWORD: emrims_password_secure
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U emrims_user']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - emrims-network
+
+  # Backend API Server
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: emrims-backend
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: emrims_user
+      DB_PASSWORD: emrims_password_secure
+      DB_NAME: emrims_db
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      JWT_EXPIRE: 24h
+      REFRESH_TOKEN_EXPIRE: 30d
+      PORT: 5000
+    ports:
+      - '5000:5000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+    networks:
+      - emrims-network
+    command: npm run dev
+
+  # Frontend Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: emrims-frontend
+    environment:
+      VITE_API_URL: http://localhost:5000
+    ports:
+      - '3000:3000'
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+    networks:
+      - emrims-network
+    command: npm run dev
+
+volumes:
+  postgres_data:
+
+networks:
+  emrims-network:
+    driver: bridge
